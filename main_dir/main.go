@@ -5,20 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
 )
-
-type Session struct {
-	Id      string
-	Doc     []rune
-	Clients map[string]*Client
-	Mu      sync.Mutex
-}
-
-type SessionManager struct {
-	Sessions map[string]*Session
-	Mu       sync.Mutex
-}
 
 var addr = flag.String("addr", ":4000", "http service address")
 

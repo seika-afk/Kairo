@@ -1,39 +1,70 @@
 package main
 
-type Hub struct {
-	clients   map[*Client]bool
-	broadcast chan []byte
+import "sync"
 
-	register   chan *Client
-	unregister chan *Client
+// can also call this file session.go : uh cuz it has sessions but if we talk in respect to websocket its also like hub
+
+type Session struct {
+	//session specfic
+	ID  string
+	Doc []rune
+	//hub specific
+	Clients   map[*Client]bool
+	Broadcast chan []byte
+
+	Register   chan *Client
+	Unregister chan *Client
+
+	Mu sync.Mutex
 }
 
-func newHub() *Hub {
-	return &Hub{
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+type SessionManager struct {
+	Sessions map[string]*Session
+	Mu       sync.Mutex
+}
+
+func newSession(id string) *Session {
+	return &Session{
+		ID:  id,
+		Doc: []rune{},
+
+		Broadcast:  make(chan []byte),
+		Register:   make(chan *Client),
+		Unregister: make(chan *Client),
+		Clients:    make(map[*Client]bool),
 	}
 }
 
-func (h *Hub) run() {
+func (m *SessionManager) getSession(id string) *Session {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	session, exists := m.Sessions[id]
+	if exists {
+		return session
+	}
+	session = newSession(id)
+	m.Sessions[id] = session
+	go session.run()
+	return session
+
+}
+func (h *Session) run() {
 	for {
 		select {
-		case client := <-h.register:
-			h.clients[client] = true
-		case client := <-h.unregister:
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
+		case client := <-h.Register:
+			h.Clients[client] = true
+		case client := <-h.Unregister:
+			if _, ok := h.Clients[client]; ok {
+				delete(h.Clients, client)
 				close(client.send)
 			}
-		case message := <-h.broadcast:
-			for client := range h.clients {
+		case message := <-h.Broadcast:
+			for client := range h.Clients {
 				select {
 				case client.send <- message:
 				default:
 					close(client.send)
-					delete(h.clients, client)
+					delete(h.Clients, client)
 				}
 			}
 		}
