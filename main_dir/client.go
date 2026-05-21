@@ -25,14 +25,14 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	session *Session
+	conn    *websocket.Conn
+	send    chan []byte
 }
 
 func (c *Client) readPump() {
 	defer func() {
-		c.hub.unregister <- c
+		c.session.Unregister <- c
 		c.conn.Close()
 	}()
 
@@ -46,7 +46,7 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.hub.broadcast <- message
+		c.session.Broadcast <- message
 
 	}
 }
@@ -86,14 +86,14 @@ func (c *Client) writePump() {
 	}
 
 }
-func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func serveWs(session *Session, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
-	client.hub.register <- client
+	client := &Client{session: session, conn: conn, send: make(chan []byte, 256)}
+	client.session.Register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
