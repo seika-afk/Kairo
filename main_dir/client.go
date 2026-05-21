@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -86,12 +88,26 @@ func (c *Client) writePump() {
 	}
 
 }
-func serveWs(session *Session, w http.ResponseWriter, r *http.Request) {
+func serveWs(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	var join Message
+	err = conn.ReadJSON(&join)
+	if err != nil {
+		return
+	}
+	if join.Kind == "join" {
+		fmt.Println("Client Joined With session id : ", join.SessionID)
+	}
+	if join.Kind != "join" {
+		return
+	}
+
+	session := sm.getSession(join.SessionID)
+
 	client := &Client{session: session, conn: conn, send: make(chan []byte, 256)}
 	client.session.Register <- client
 
@@ -99,4 +115,10 @@ func serveWs(session *Session, w http.ResponseWriter, r *http.Request) {
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
+
+	joinBytes, err := json.Marshal(join)
+	if err != nil {
+		return
+	}
+	session.Broadcast <- joinBytes
 }

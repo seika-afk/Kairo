@@ -8,14 +8,16 @@ import (
 )
 
 var addr = flag.String("addr", ":4000", "http service address")
+var sm = SessionManager{
+	Sessions: make(map[string]*Session),
+}
 
 func main() {
 	flag.Parse()
-	hub := newHub()
-	go hub.run()
+
 	fmt.Println("WS Server started at : ws://localhost:", *addr, "/ws")
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serveWs(hub, w, r)
+		serveWs(w, r)
 	})
 	err := http.ListenAndServe(*addr, nil)
 
