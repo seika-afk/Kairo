@@ -105,8 +105,10 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	if join.Kind != "join" {
 		return
 	}
-
 	session := sm.getSession(join.SessionID)
+	if join.Doc != nil {
+		session.Doc = []rune(*join.Doc)
+	}
 
 	client := &Client{session: session, conn: conn, send: make(chan []byte, 256)}
 	client.session.Register <- client
@@ -121,4 +123,15 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.Broadcast <- joinBytes
+
+	initPayload := InitPayload{
+		Kind: "init",
+		Doc:  string(session.Doc),
+	}
+
+	initBytes, err := json.Marshal(initPayload)
+	if err != nil {
+		return
+	}
+	session.Broadcast <- initBytes
 }
