@@ -52,13 +52,18 @@ func (h *Session) run() {
 	for {
 		select {
 		case client := <-h.Register:
+			h.Mu.Lock()
 			h.Clients[client] = true
+			h.Mu.Unlock()
 		case client := <-h.Unregister:
+			h.Mu.Lock()
 			if _, ok := h.Clients[client]; ok {
 				delete(h.Clients, client)
 				close(client.send)
 			}
+			h.Mu.Unlock()
 		case message := <-h.Broadcast:
+			h.Mu.Lock()
 			for client := range h.Clients {
 				select {
 				case client.send <- message:
@@ -67,6 +72,7 @@ func (h *Session) run() {
 					delete(h.Clients, client)
 				}
 			}
+			h.Mu.Unlock()
 		}
 	}
 }

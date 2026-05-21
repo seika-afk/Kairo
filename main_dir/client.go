@@ -122,7 +122,19 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	session.Broadcast <- joinBytes
+	session.Mu.Lock()
+	for otherClient := range session.Clients {
+		if otherClient == client {
+			continue
+		}
+		select {
+		case otherClient.send <- joinBytes:
+		default:
+			close(otherClient.send)
+			delete(session.Clients, otherClient)
+		}
+	}
+	session.Mu.Unlock()
 
 	initPayload := InitPayload{
 		Kind: "init",
@@ -133,5 +145,5 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	session.Broadcast <- initBytes
+	client.send <- initBytes
 }
