@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
+	"kairo/ot"
 	"log"
 	"net/http"
 	"time"
@@ -28,8 +27,13 @@ var upgrader = websocket.Upgrader{
 
 type Client struct {
 	session *Session
+	id      string
 	conn    *websocket.Conn
 	send    chan []byte
+}
+type ClientOp struct {
+	Client *Client
+	Op     ot.Op
 }
 
 func (c *Client) readPump() {
@@ -47,8 +51,20 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.session.Broadcast <- message
+		var op ot.Op
+		err = json.Unmarshal(message, &op)
+		if err != nil {
+			log.Printf("ignoring malformed op ")
+			continue
+		}
+		if op.Type != "insert" && op.Type != "delete" {
+			log.Printf("ignoring non-op websocket message from ")
+			continue
+		}
+		c.session.IncomingOp <- ClientOp{
+			Client: c,
+			Op:     op,
+		}
 
 	}
 }
@@ -97,12 +113,14 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	var join Message
 	err = conn.ReadJSON(&join)
 	if err != nil {
+		log.Printf("failed to read join message from %v", err)
 		return
 	}
 	if join.Kind == "join" {
-		fmt.Println("Client Joined With session id : ", join.SessionID)
+		log.Printf("client joined session=%s client_id=%s ", join.SessionID, join.ClientID)
 	}
 	if join.Kind != "join" {
+		log.Printf("ignoring first websocket message kind=%q", join.Kind)
 		return
 	}
 	session := sm.getSession(join.SessionID)
@@ -110,11 +128,9 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 		session.Doc = []rune(*join.Doc)
 	}
 
-	client := &Client{session: session, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{session: session, id: join.ClientID, conn: conn, send: make(chan []byte, 256)}
 	client.session.Register <- client
 
-	// Allow collection of memory referenced by the caller by doing all work in
-	// new goroutines.
 	go client.writePump()
 	go client.readPump()
 

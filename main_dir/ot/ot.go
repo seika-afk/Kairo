@@ -50,18 +50,16 @@ func Apply(doc []rune, op Op) []rune {
 	switch op.Type {
 	case "insert":
 		insertRunes := []rune(op.Text)
-		left := doc[:op.Position]
-		right := doc[op.Position:]
-
-		newDoc := append(left, insertRunes...)
-		newDoc = append(newDoc, right...)
+		newDoc := make([]rune, 0, len(doc)+len(insertRunes))
+		newDoc = append(newDoc, doc[:op.Position]...)
+		newDoc = append(newDoc, insertRunes...)
+		newDoc = append(newDoc, doc[op.Position:]...)
 		return newDoc
 
 	case "delete":
-		left := doc[:op.Position]
-		right := doc[op.Position+op.Length:]
-
-		newDoc := append(left, right...)
+		newDoc := make([]rune, 0, len(doc)-op.Length)
+		newDoc = append(newDoc, doc[:op.Position]...)
+		newDoc = append(newDoc, doc[op.Position+op.Length:]...)
 		return newDoc
 
 	}

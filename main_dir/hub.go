@@ -1,6 +1,11 @@
 package main
 
-import "sync"
+import (
+	"encoding/json"
+	"sync"
+
+	"kairo/ot"
+)
 
 // can also call this file session.go : uh cuz it has sessions but if we talk in respect to websocket its also like hub
 
@@ -14,6 +19,10 @@ type Session struct {
 
 	Register   chan *Client
 	Unregister chan *Client
+	IncomingOp chan ClientOp
+
+	Version int
+	History []ot.Op
 
 	Mu sync.Mutex
 }
@@ -31,7 +40,12 @@ func newSession(id string) *Session {
 		Broadcast:  make(chan []byte),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
-		Clients:    make(map[*Client]bool),
+		IncomingOp: make(chan ClientOp),
+
+		Clients: make(map[*Client]bool),
+
+		Version: 0,
+		History: []ot.Op{},
 	}
 }
 
@@ -72,6 +86,34 @@ func (h *Session) run() {
 					delete(h.Clients, client)
 				}
 			}
+			h.Mu.Unlock()
+		case incoming := <-h.IncomingOp:
+			h.Mu.Lock()
+			transformed := ot.TransformAgainstHistory(incoming.Op, incoming.Client.session.History, incoming.Op.Version)
+			incoming.Client.session.Doc = ot.Apply(incoming.Client.session.Doc, transformed)
+
+			//inc version and add in history
+			incoming.Client.session.Version++
+			transformed.Version = incoming.Client.session.Version
+
+			incoming.Client.session.History = append(incoming.Client.session.History, transformed)
+
+			// apply the transformed op to all other clients in the session
+			opBytes, err := json.Marshal(transformed)
+			if err == nil {
+				for otherClient := range h.Clients {
+					if otherClient == incoming.Client {
+						continue
+					}
+					select {
+					case otherClient.send <- opBytes:
+					default:
+						close(otherClient.send)
+						delete(h.Clients, otherClient)
+					}
+				}
+			}
+
 			h.Mu.Unlock()
 		}
 	}
