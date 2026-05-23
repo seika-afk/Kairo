@@ -35,6 +35,10 @@ type ClientOp struct {
 	Client *Client
 	Op     ot.Op
 }
+type CursorEnvelope struct {
+	Sender *Client
+	Data   []byte
+}
 
 func (c *Client) readPump() {
 	defer func() {
@@ -51,12 +55,22 @@ func (c *Client) readPump() {
 			}
 			break
 		}
+		var cursor Cursor
+		if err := json.Unmarshal(message, &cursor); err == nil && cursor.Kind == "cursor" {
+			c.session.CursorBroadcast <- CursorEnvelope{
+				Sender: c,
+				Data:   message,
+			}
+			continue
+		}
+
 		var op ot.Op
 		err = json.Unmarshal(message, &op)
 		if err != nil {
 			log.Printf("ignoring malformed op ")
 			continue
 		}
+
 		if op.Type != "insert" && op.Type != "delete" {
 			log.Printf("ignoring non-op websocket message from ")
 			continue

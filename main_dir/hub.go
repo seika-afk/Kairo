@@ -15,11 +15,13 @@ type Session struct {
 	Doc []rune
 	//hub specific
 	Clients   map[*Client]bool
+	RemoteCursors map[string]Cursor
 	Broadcast chan []byte
 
-	Register   chan *Client
-	Unregister chan *Client
-	IncomingOp chan ClientOp
+	Register        chan *Client
+	Unregister      chan *Client
+	IncomingOp      chan ClientOp
+	CursorBroadcast chan CursorEnvelope
 
 	Version int
 	History []ot.Op
@@ -41,8 +43,10 @@ func newSession(id string) *Session {
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		IncomingOp: make(chan ClientOp),
+		CursorBroadcast: make(chan CursorEnvelope),
 
-		Clients: make(map[*Client]bool),
+		Clients:       make(map[*Client]bool),
+		RemoteCursors: make(map[string]Cursor),
 
 		Version: 0,
 		History: []ot.Op{},
@@ -74,6 +78,21 @@ func (h *Session) run() {
 			if _, ok := h.Clients[client]; ok {
 				delete(h.Clients, client)
 				close(client.send)
+				delete(h.RemoteCursors, client.id)
+				clearCursorBytes, err := json.Marshal(Cursor{
+					Kind:     "cursor_clear",
+					ClientID: client.id,
+				})
+				if err == nil {
+					for otherClient := range h.Clients {
+						select {
+						case otherClient.send <- clearCursorBytes:
+						default:
+							close(otherClient.send)
+							delete(h.Clients, otherClient)
+						}
+					}
+				}
 			}
 			h.Mu.Unlock()
 		case message := <-h.Broadcast:
@@ -114,6 +133,36 @@ func (h *Session) run() {
 				}
 			}
 
+			h.Mu.Unlock()
+
+		case cursorEnvelope := <-h.CursorBroadcast:
+			h.Mu.Lock()
+			var cursor Cursor
+			if err := json.Unmarshal(cursorEnvelope.Data, &cursor); err == nil {
+				// The websocket sender owns the cursor identity; do not trust the payload's client_id.
+				cursor.ClientID = cursorEnvelope.Sender.id
+				normalizedCursorBytes, marshalErr := json.Marshal(cursor)
+				if marshalErr == nil {
+					cursorEnvelope.Data = normalizedCursorBytes
+				}
+				h.RemoteCursors[cursor.ClientID] = cursor
+			}
+			for client := range h.Clients {
+
+				// don't send back to sender
+				if client == cursorEnvelope.Sender {
+					continue
+				}
+
+				select {
+
+				case client.send <- cursorEnvelope.Data:
+
+				default:
+					close(client.send)
+					delete(h.Clients, client)
+				}
+			}
 			h.Mu.Unlock()
 		}
 	}
