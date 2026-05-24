@@ -14,9 +14,9 @@ type Session struct {
 	ID  string
 	Doc []rune
 	//hub specific
-	Clients   map[*Client]bool
+	Clients       map[*Client]bool
 	RemoteCursors map[string]Cursor
-	Broadcast chan []byte
+	Broadcast     chan []byte
 
 	Register        chan *Client
 	Unregister      chan *Client
@@ -39,10 +39,10 @@ func newSession(id string) *Session {
 		ID:  id,
 		Doc: []rune{},
 
-		Broadcast:  make(chan []byte),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		IncomingOp: make(chan ClientOp),
+		Broadcast:       make(chan []byte),
+		Register:        make(chan *Client),
+		Unregister:      make(chan *Client),
+		IncomingOp:      make(chan ClientOp),
 		CursorBroadcast: make(chan CursorEnvelope),
 
 		Clients:       make(map[*Client]bool),

@@ -9,17 +9,31 @@ type Op struct {
 	Version  int    `json:"version"`
 }
 
+func opSpan(op Op) int {
+	switch op.Type {
+	case "insert":
+		return len([]rune(op.Text))
+	case "delete":
+		if op.Length < 0 {
+			return 0
+		}
+		return op.Length
+	default:
+		return 0
+	}
+}
+
 func Transform(incoming Op, against Op) Op {
 	switch incoming.Type {
 	case "insert":
 		switch against.Type {
 		case "insert":
 			if against.Position <= incoming.Position {
-				incoming.Position += len([]rune(against.Text))
+				incoming.Position += opSpan(against)
 			}
 		case "delete":
 			if against.Position < incoming.Position {
-				incoming.Position -= against.Length
+				incoming.Position -= opSpan(against)
 				//if the insert ends up inside/before deleted region-> snap it to start of delete
 				if incoming.Position < against.Position {
 					incoming.Position = against.Position
@@ -31,12 +45,12 @@ func Transform(incoming Op, against Op) Op {
 		switch against.Type {
 		case "insert":
 			if against.Position < incoming.Position {
-				incoming.Position -= against.Length
+				incoming.Position -= opSpan(against)
 
 			}
 		case "delete":
 			if against.Position < incoming.Position {
-				incoming.Position -= against.Length
+				incoming.Position -= opSpan(against)
 				if incoming.Position < against.Position {
 					incoming.Position = against.Position
 				}
@@ -47,6 +61,13 @@ func Transform(incoming Op, against Op) Op {
 }
 
 func Apply(doc []rune, op Op) []rune {
+	if op.Position < 0 {
+		op.Position = 0
+	}
+	if op.Position > len(doc) {
+		op.Position = len(doc)
+	}
+
 	switch op.Type {
 	case "insert":
 		insertRunes := []rune(op.Text)
@@ -57,9 +78,16 @@ func Apply(doc []rune, op Op) []rune {
 		return newDoc
 
 	case "delete":
-		newDoc := make([]rune, 0, len(doc)-op.Length)
+		if op.Length < 0 {
+			return doc
+		}
+		end := op.Position + op.Length
+		if end > len(doc) {
+			end = len(doc)
+		}
+		newDoc := make([]rune, 0, len(doc)-(end-op.Position))
 		newDoc = append(newDoc, doc[:op.Position]...)
-		newDoc = append(newDoc, doc[op.Position+op.Length:]...)
+		newDoc = append(newDoc, doc[end:]...)
 		return newDoc
 
 	}

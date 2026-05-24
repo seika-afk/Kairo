@@ -34,6 +34,47 @@ func TestApplyDelete(t *testing.T) {
 	}
 }
 
+func TestApplyClampsOutOfRangeDelete(t *testing.T) {
+	doc := []rune("a")
+	op := Op{
+		Type:     "delete",
+		Position: 2,
+		Length:   1,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Apply panicked on out-of-range delete: %v", r)
+		}
+	}()
+
+	got := Apply(doc, op)
+	want := []rune("a")
+
+	if string(got) != string(want) {
+		t.Fatalf("Apply out-of-range delete = %q, want %q", string(got), string(want))
+	}
+}
+
+func TestTransformDeleteAgainstInsertUsesTextLength(t *testing.T) {
+	incoming := Op{
+		Type:     "delete",
+		Position: 5,
+		Length:   2,
+	}
+	against := Op{
+		Type:     "insert",
+		Position: 2,
+		Text:     "abcd",
+	}
+
+	got := Transform(incoming, against)
+
+	if got.Position != 1 {
+		t.Fatalf("Transform delete/insert position = %d, want %d", got.Position, 1)
+	}
+}
+
 func TestTransformInsertAgainstInsert(t *testing.T) {
 	incoming := Op{
 		Type:     "insert",
