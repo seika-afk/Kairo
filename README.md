@@ -6,4 +6,8 @@ Its will as of now operate as Neovim plugin for collaborative text editing. Thou
 Its a Open source Project ,so feel free to use or contribute to it.
 
 ---
-Progress : Building
+Progress : 
+- [x] completed
+- [ ] Documentation for endpoints
+- [ ] Demo
+- [ ] Posts
