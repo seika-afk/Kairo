@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"kairo/ot"
+	"github.com/seika-afk/Kairo/ot"
 )
 
 // can also call this file session.go : uh cuz it has sessions but if we talk in respect to websocket its also like hub

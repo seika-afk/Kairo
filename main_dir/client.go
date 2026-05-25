@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"kairo/ot"
+	"github.com/seika-afk/Kairo/ot"
 	"log"
 	"net/http"
 	"time"

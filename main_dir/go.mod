@@ -1,4 +1,4 @@
-module kairo
+module github.com/seika-afk/Kairo
 
 go 1.26.2
 
